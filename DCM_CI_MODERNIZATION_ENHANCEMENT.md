@@ -46,8 +46,8 @@ jobs to run in parallel.
 ```text
 Each hypervisor has one GitHub runner.
 
-Private run
-  -> user selects a specific hypervisor
+Named-target run
+  -> user selects an approved runner label
 
 Shared CI run
   -> GitHub selects any free hypervisor with the ci-pool label
@@ -95,7 +95,7 @@ Each manually-triggered or scheduled GitHub workflow follows this order:
 2. GitHub routes the job to the matching idle runner.
 3. Runner performs preflight and starts the local Jenkins execution container.
 4. Run the requested preclean mode.
-5. Deploy OCP through auto-toolbox when deploy_ocp=true.
+5. Deploy OCP through the OCP deployment stage when deploy_ocp=true.
 6. Run the DCM deployment job with duplicate cleanup/OCP deployment disabled.
 7. Run E2E tests; publish redacted logs, JUnit, versions, and result.
 8. Apply the selected teardown policy and preserve the runner/Jenkins state.
@@ -108,14 +108,14 @@ return a job result, fail the GitHub workflow before deployment starts.
 ```mermaid
 flowchart TB
     START[GitHub Run workflow]
-    SELECT[Select private host or ci-pool]
+    SELECT[Select approved target or ci-pool]
     RUNNER[Matching idle hypervisor runner]
     JENKINS[Start Jenkins tooling container]
     CLEAN{preclean_mode}
     DCM[DCM preclean]
-    FULL[Infra cleanup-all-terraform]
+    FULL[Full infrastructure cleanup]
     OCP{deploy_ocp}
-    AUTO[Infra auto-toolbox]
+    AUTO[OCP deployment]
     DEPLOY[DCM Groovy deploy and E2E]
     RESULT[Redacted logs, JUnit, versions, result]
 
@@ -140,8 +140,8 @@ Ansible while retaining the same input and artifact contracts:
 
 ```text
 DCM preclean                 -> Jenkins Groovy now; native script later
-Infra/cleanup-all-terraform  -> Jenkins job now; native code later
-Infra/auto-toolbox           -> Jenkins job now; native code later
+Full infrastructure cleanup  -> Jenkins job now; native code later
+OCP deployment               -> Jenkins job now; native code later
 DCM deploy and E2E           -> Jenkins Groovy now; native scripts later
 ```
 
@@ -163,26 +163,26 @@ validated native replacement.
 Each runner has common labels plus a unique host label.
 
 ```text
-Private host example
-  self-hosted, linux, dcm-ci, host-private-a
+Named-target runner example
+  self-hosted, linux, dcm-ci, target-a
 
 Shared CI host example
-  self-hosted, linux, dcm-ci, host-ci-a, ci-pool
+  self-hosted, linux, dcm-ci, target-b, ci-pool
 ```
 
-Private hypervisors must **never** receive the `ci-pool` label.
+Dedicated runners must **never** receive the `ci-pool` label.
 
 Runner labels route work; they do not authorize users. A GitHub dropdown alone
-cannot stop one user from selecting another person's private host. Restrict
+cannot stop one user from selecting a target they should not use. Restrict
 workflow-dispatch permissions, use protected environments, or use separate
-private-host workflows/repositories when host ownership needs enforcement.
+target-specific workflows/repositories when ownership needs enforcement.
 
 The GitHub workflow exposes an approved dropdown:
 
 ```text
 execution_target:
-  - host-private-a
-  - host-ci-a
+  - target-a
+  - target-b
   - ci-pool
 ```
 
@@ -193,8 +193,8 @@ runs-on: [self-hosted, linux, dcm-ci, "${{ inputs.execution_target }}"]
 ```
 
 ```text
-execution_target=host-private-a
-  -> runs only on the selected private-host runner
+execution_target=target-a
+  -> runs only on the selected named-target runner
 
 execution_target=ci-pool
   -> GitHub chooses any idle shared runner with ci-pool
@@ -211,11 +211,11 @@ labels as free-text input.
 
 | Input | Values | Purpose |
 | --- | --- | --- |
-| `execution_target` | approved host label or `ci-pool` | Select one private host or an idle shared CI host. |
+| `execution_target` | approved runner label or `ci-pool` | Select one named target or an idle shared CI runner. |
 | `preclean_mode` | `none`, `dcm`, `full` | Select exactly one cleanup scope. |
-| `deploy_ocp` | `true`, `false` | Run `auto-toolbox` only when OCP deployment is requested. |
+| `deploy_ocp` | `true`, `false` | Run the OCP deployment stage only when OCP deployment is requested. |
 | `cluster_name` | approved name | Name used for OCP deployment. |
-| `ocp_version` | approved version | OCP version passed to `auto-toolbox`. |
+| `ocp_version` | approved version | OCP version passed to the OCP deployment stage. |
 | `deploy_rhdh` | `true`, `false` | Maps to the existing RHDH Jenkins checkbox. |
 | `enable_dcm_auth` | `true`, `false` | Maps to the existing RHBK/DCM auth checkbox. |
 | `enable_acm` | `true`, `false` | Maps to the ACM provider checkbox. |
@@ -239,12 +239,12 @@ dcm
 
 full
   -> run DCM preclean
-  -> run Infra/cleanup-all-terraform
+  -> run full infrastructure cleanup
 ```
 
 Full preclean must never delete the runner state, Jenkins state, keystore
 access, or other paths established in Stage 1. It may still remove all CI
-workload, OCP, VM/libvirt, and Terraform resources covered by the cleanup job.
+workload, OCP, VM/libvirt, and infrastructure resources covered by the cleanup job.
 
 ## Jenkins/Groovy execution model
 
@@ -259,13 +259,13 @@ if preclean_mode=dcm:
 
 if preclean_mode=full:
   DCM preclean
-  -> Infra/cleanup-all-terraform
+  -> full infrastructure cleanup
 
 if deploy_ocp=true:
-  Infra/auto-toolbox
+  OCP deployment stage
 
 then:
-  flightpath-dcm-deploy
+  DCM deployment job
 ```
 
 The DCM deployment job must always receive:
@@ -275,7 +275,7 @@ PRECLEAN=false
 DEPLOY_OCP_CLUSTER=false
 ```
 
-This prevents the DCM Groovy pipeline from calling cleanup or `auto-toolbox` a
+This prevents the DCM Groovy pipeline from calling cleanup or OCP deployment a
 second time.
 
 The existing Jenkins component checkboxes define component behavior:
@@ -321,22 +321,15 @@ deployment.
   Run host preflight checks for disk, required ports, old containers, and
   conflicting deployments.
 - A full cleanup failure stops the workflow before OCP deployment.
-- An `auto-toolbox` failure stops the DCM deployment job.
+- An OCP deployment failure stops the DCM deployment job.
 - Missing JUnit means failed or inconclusive; never report a green full test
   run with zero/missing test evidence.
 - Redact secrets from console logs, artifacts, and test reports.
 - Record image digests, workflow inputs, resolved source revisions, selected
   host label, and result in a run manifest.
 
-## References
+## Validation status
 
-- From vkolodny KB: `/Users/vkolodny/GIT/kb/facts/flightpath/dcm.md`
-- From vkolodny KB: `/Users/vkolodny/GIT/kb/facts/flightpath/ci-infrastructure.md`
-- From vkolodny KB: `/Users/vkolodny/GIT/kb/gotchas/flightpath/ci/ci-pitfalls.md`
-- From vkolodny KB: `/Users/vkolodny/GIT/kb/gotchas/flightpath/ci/common-ci-gotchas.md`
-- From vkolodny KB: `/Users/vkolodny/GIT/kb/gotchas/flightpath/ci/jenkins-lockable-resources-api-ownership.md`
-
-No existing KB procedure was found for provisioning GitHub self-hosted runners.
-Treat this document as the proposed operating model until the host image,
-runner registration, Jenkins-container packaging, and local keystore approach
-are approved and tested.
+Treat this document as a proposed operating model until runner registration,
+Jenkins-container packaging, and the local keystore approach are approved and
+tested.
