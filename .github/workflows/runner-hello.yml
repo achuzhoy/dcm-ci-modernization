@@ -2,13 +2,21 @@ name: Runner hello
 
 on:
   workflow_dispatch:
+    inputs:
+      runner_target:
+        description: Choose the runner for this test
+        required: true
+        type: choice
+        options:
+          - ocp-edge34.lab.eng.tlv2.redhat.com
+          - sealusa35.ecosys.eng.rdu2.dc.redhat.com
 
 permissions: {}
 
 jobs:
   hello:
     name: Hello from target runner
-    runs-on: [self-hosted, linux, ocp-edge34.lab.eng.tlv2.redhat.com]
+    runs-on: [self-hosted, linux, "${{ inputs.runner_target }}"]
     timeout-minutes: 5
 
     steps:
