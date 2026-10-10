@@ -16,7 +16,7 @@ permissions: {}
 
 jobs:
   hello:
-    name: Hello from target runner
+    name: "Hello from ${{ inputs.runner_target }}"
     runs-on: [self-hosted, linux, "${{ inputs.runner_target }}"]
     timeout-minutes: 5
 
