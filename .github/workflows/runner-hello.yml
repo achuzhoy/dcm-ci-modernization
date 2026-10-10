@@ -1,0 +1,20 @@
+name: Runner hello
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hello:
+    name: Hello from target runner
+    runs-on: [self-hosted, linux, dcm-ci, ocp-edge34.lab.eng.tlv2.redhat.com]
+    timeout-minutes: 5
+
+    steps:
+      - name: Confirm runner execution
+        run: |
+          echo "Hello from GitHub Actions."
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner architecture: $RUNNER_ARCH"
