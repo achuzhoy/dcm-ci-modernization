@@ -1,4 +1,5 @@
 name: Runner hello
+run-name: "Runner hello on ${{ inputs.runner_target }}"
 
 on:
   workflow_dispatch:
