@@ -8,7 +8,7 @@ permissions: {}
 jobs:
   hello:
     name: Hello from target runner
-    runs-on: [self-hosted, linux, dcm-ci, ocp-edge34.lab.eng.tlv2.redhat.com]
+    runs-on: [self-hosted, linux, ocp-edge34.lab.eng.tlv2.redhat.com]
     timeout-minutes: 5
 
     steps:
