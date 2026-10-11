@@ -1,0 +1,20 @@
+name: Actor policy denial test
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  should-not-run:
+    name: This job must be blocked by the actor policy
+    if: github.actor != 'vkolodny'
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 1
+    steps:
+      - name: Report unexpected execution
+        run: |
+          echo "ERROR: A non-allowed actor reached a self-hosted runner."
+          exit 1
