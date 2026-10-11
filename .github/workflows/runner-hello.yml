@@ -27,4 +27,4 @@ jobs:
           echo "Runner name: $RUNNER_NAME"
           echo "Runner OS: $RUNNER_OS"
           echo "Runner architecture: $RUNNER_ARCH"
-          wall "Hello Vlad"
+          wall "Hello Vlad1"
